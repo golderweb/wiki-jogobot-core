@@ -23,10 +23,45 @@
 #
 
 import os
+from datetime import datetime
 from email.mime.text import MIMEText
 from subprocess import Popen, PIPE, TimeoutExpired
 
 import pywikibot
+
+from pywikibot.bot import(
+    DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
+
+
+def output( text, level="STDOUT", decoder=None, newline=True,
+            layer=None, **kwargs ):
+    """
+    Wrapper for pywikibot output functions
+    """
+
+    text = datetime.utcnow().strftime( "%Y-%m-%d %H:%M:%S (UTC) " ) + text
+
+    if ( level.upper() == "STDOUT" ):
+        _level = STDOUT
+    elif( level.upper() == "INFO" ):
+        _level = INFO
+    elif( level.upper() == "WARNING" ):
+        _level = WARNING
+    elif( level.upper() == "ERROR" ):
+        _level = ERROR
+    elif( level.upper() == "LOG" or level.upper() == "VERBOSE" ):
+        _level = VERBOSE
+    elif( level.upper() == "CRITICAL" ):
+        _level = CRITICAL
+    elif( level.upper() == "DEBUG" ):
+        _level = DEBUG
+    else:
+        pass
+
+    if ( level == DEBUG ):
+        logoutput(text, decoder, newline, _level, layer, **kwargs)
+    else:
+        logoutput(text, decoder, newline, _level, **kwargs)
 
 
 class JogoBot:
