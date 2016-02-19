@@ -33,7 +33,7 @@ from pywikibot.bot import(
     DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
 
 
-def output( text, level="STDOUT", decoder=None, newline=True,
+def output( text, level="INFO", decoder=None, newline=True,
             layer=None, **kwargs ):
     """
     Wrapper for pywikibot output functions
@@ -62,6 +62,41 @@ def output( text, level="STDOUT", decoder=None, newline=True,
         logoutput(text, decoder, newline, _level, layer, **kwargs)
     else:
         logoutput(text, decoder, newline, _level, **kwargs)
+
+
+# Since we like to have timestamps in Output for logging, we replace
+# pywikibot.output with jogobot.output via monkey patching
+def pywikibot_output( text, decoder=None, newline=True,
+                      toStdout=False, **kwargs ):
+    r"""Output a message to the user via the userinterface.
+
+    Works like print, but uses the encoding used by the user's console
+    (console_encoding in the configuration file) instead of ASCII.
+
+    If decoder is None, text should be a unicode string. Otherwise it
+    should be encoded in the given encoding.
+
+    If newline is True, a line feed will be added after printing the text.
+
+    If toStdout is True, the text will be sent to standard output,
+    so that it can be piped to another process. All other text will
+    be sent to stderr. See: https://en.wikipedia.org/wiki/Pipeline_%28Unix%29
+
+    text can contain special sequences to create colored output. These
+    consist of the escape character \03 and the color name in curly braces,
+    e. g. \03{lightpurple}. \03{default} resets the color.
+
+    Other keyword arguments are passed unchanged to the logger; so far, the
+    only argument that is useful is "exc_info=True", which causes the
+    log message to include an exception traceback.
+
+    """
+    if toStdout:  # maintained for backwards-compatibity only
+        output(text, "STDOUT", decoder, newline, **kwargs)
+    else:
+        output(text, "INFO", decoder, newline, **kwargs)
+
+pywikibot.output = pywikibot_output
 
 
 class JogoBot:
