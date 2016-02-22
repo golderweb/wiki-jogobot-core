@@ -23,10 +23,138 @@
 #
 
 import os
+from datetime import datetime
 from email.mime.text import MIMEText
 from subprocess import Popen, PIPE, TimeoutExpired
 
 import pywikibot
+
+from pywikibot.bot import(
+    DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
+
+
+def output( text, level="INFO", decoder=None, newline=True,
+            layer=None, **kwargs ):
+    """
+    Wrapper for pywikibot output functions
+    """
+
+    text = datetime.utcnow().strftime( "%Y-%m-%d %H:%M:%S (UTC) " ) + text
+
+    if ( level.upper() == "STDOUT" ):
+        _level = STDOUT
+    elif( level.upper() == "INFO" ):
+        _level = INFO
+    elif( level.upper() == "WARNING" ):
+        _level = WARNING
+    elif( level.upper() == "ERROR" ):
+        _level = ERROR
+    elif( level.upper() == "LOG" or level.upper() == "VERBOSE" ):
+        _level = VERBOSE
+    elif( level.upper() == "CRITICAL" ):
+        _level = CRITICAL
+    elif( level.upper() == "DEBUG" ):
+        _level = DEBUG
+    else:
+        pass
+
+    if ( level == DEBUG ):
+        logoutput(text, decoder, newline, _level, layer, **kwargs)
+    else:
+        logoutput(text, decoder, newline, _level, **kwargs)
+
+
+# Since we like to have timestamps in Output for logging, we replace
+# pywikibot.output with jogobot.output via monkey patching
+def pywikibot_output( text, decoder=None, newline=True,
+                      toStdout=False, **kwargs ):
+    r"""Output a message to the user via the userinterface.
+
+    Works like print, but uses the encoding used by the user's console
+    (console_encoding in the configuration file) instead of ASCII.
+
+    If decoder is None, text should be a unicode string. Otherwise it
+    should be encoded in the given encoding.
+
+    If newline is True, a line feed will be added after printing the text.
+
+    If toStdout is True, the text will be sent to standard output,
+    so that it can be piped to another process. All other text will
+    be sent to stderr. See: https://en.wikipedia.org/wiki/Pipeline_%28Unix%29
+
+    text can contain special sequences to create colored output. These
+    consist of the escape character \03 and the color name in curly braces,
+    e. g. \03{lightpurple}. \03{default} resets the color.
+
+    Other keyword arguments are passed unchanged to the logger; so far, the
+    only argument that is useful is "exc_info=True", which causes the
+    log message to include an exception traceback.
+
+    """
+    if toStdout:  # maintained for backwards-compatibity only
+        output(text, "STDOUT", decoder, newline, **kwargs)
+    else:
+        output(text, "INFO", decoder, newline, **kwargs)
+
+pywikibot.output = pywikibot_output
+
+
+def sendmail( Subject, Body, To=None, CC=None, BCC=None,
+              From="JogoBot <tools.jogobot@tools.wmflabs.org>" ):
+    """
+    Provides a simple wrapper for exim (MTA) on tool labs
+    Params should be formated according related fields in RFC 5322
+
+    @param subject  Mail subject
+    @type subject str
+    @param body    Mail body as (formated) string
+    @type body  unicode-str
+    @param to   Mail-Recipiends (comma-separeded)
+    @type str
+    @param from Mail-Sender
+    @type str
+    """
+
+    # Create mail body as MIME-Object
+    msg = MIMEText(Body)
+
+    # Set up mail header
+    msg['Subject'] = Subject
+
+    msg['From'] = From
+
+    if To:
+        msg['To'] = To
+
+    if CC:
+        msg['CC'] = CC
+
+    if BCC:
+        msg['BCC'] = BCC
+
+    msg['Content-Type'] = 'text/plain; charset=utf-8'
+
+    # Make sure we have a recipient
+    if not( To or CC or BCC):
+        raise JogoBotMailError( "No recipient was provided!" )
+
+    # Send the message via exim
+    with Popen( ["/usr/sbin/exim", "-odf", "-i", "-t"],
+                stdin=PIPE, universal_newlines=True) as MTA:
+        MTA.communicate(msg.as_string())
+
+        # Try to get returncode of MTA
+        # Process is not terminated until timeout, set returncode to None
+        try:
+            returncode = MTA.wait(timeout=30)
+        except TimeoutExpired:
+            returncode = None
+
+    # Catch MTA errors
+    if returncode:
+        raise JogoBotMailError( "/usr/sbin/exim terminated with " +
+                                "returncode != 0. Returncode was " +
+                                str( returncode ) )
 
 
 class JogoBot:
@@ -134,64 +262,6 @@ class JogoBot:
         # Try to create file
         with open(disable_file, 'a'):
             pass
-
-    @staticmethod
-    def sendmail( Subject, Body, To=None, CC=None, BCC=None,
-                  From="JogoBot <tools.jogobot@tools.wmflabs.org>" ):
-        """
-        Provides a simple wrapper for exim (MTA) on tool labs
-        Params should be formated according related fields in RFC 5322
-
-        @param subject  Mail subject
-        @type subject str
-        @param body    Mail body as (formated) string
-        @type body  unicode-str
-        @param to   Mail-Recipiends (comma-separeded)
-        @type str
-        @param from Mail-Sender
-        @type str
-        """
-
-        # Create mail body as MIME-Object
-        msg = MIMEText(Body)
-
-        # Set up mail header
-        msg['Subject'] = Subject
-
-        msg['From'] = From
-
-        if To:
-            msg['To'] = To
-
-        if CC:
-            msg['CC'] = CC
-
-        if BCC:
-            msg['BCC'] = BCC
-
-        msg['Content-Type'] = 'text/plain; charset=utf-8'
-
-        # Make sure we have a recipient
-        if not( To or CC or BCC):
-            raise JogoBotMailError( "No recipient was provided!" )
-
-        # Send the message via exim
-        with Popen( ["/usr/sbin/exim", "-odf", "-i", "-t"],
-                    stdin=PIPE, universal_newlines=True) as MTA:
-            MTA.communicate(msg.as_string())
-
-            # Try to get returncode of MTA
-            # Process is not terminated until timeout, set returncode to None
-            try:
-                returncode = MTA.wait(timeout=30)
-            except TimeoutExpired:
-                returncode = None
-
-        # Catch MTA errors
-        if returncode:
-            raise JogoBotMailError( "/usr/sbin/exim terminated with " +
-                                    "returncode != 0. Returncode was " +
-                                    str( returncode ) )
 
 
 class JogoBotMailError( Exception ):
