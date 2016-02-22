@@ -32,6 +32,8 @@ import pywikibot
 from pywikibot.bot import(
     DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
 
+import jogobot.config as config
+
 
 def output( text, level="INFO", decoder=None, newline=True,
             layer=None, **kwargs ):
@@ -132,34 +134,79 @@ def sendmail( Subject, Body, To=None, CC=None, BCC=None,
     if BCC:
         msg['BCC'] = BCC
 
-    msg['Content-Type'] = 'text/plain; charset=utf-8'
+    msg['Content-Type'] = 'text/plain; charset="utf-8"'
 
     # Make sure we have a recipient
     if not( To or CC or BCC):
-        raise JogoBotMailError( "No recipient was provided!" )
+        raise MailError( "No recipient was provided!" )
 
-    # Send the message via exim
-    with Popen( ["/usr/sbin/exim", "-odf", "-i", "-t"],
-                stdin=PIPE, universal_newlines=True) as MTA:
-        MTA.communicate(msg.as_string())
+    # We have no local MTA so we need to catch errors and write to file instead
+    try:
+        # Send the message via exim
+        with Popen( config.mail_cmd, stdin=PIPE,
+                    universal_newlines=True ) as MTA:
 
-        # Try to get returncode of MTA
-        # Process is not terminated until timeout, set returncode to None
-        try:
-            returncode = MTA.wait(timeout=30)
-        except TimeoutExpired:
-            returncode = None
+            MTA.communicate(msg.as_string())
 
-    # Catch MTA errors
-    if returncode:
-        raise JogoBotMailError( "/usr/sbin/exim terminated with " +
-                                "returncode != 0. Returncode was " +
-                                str( returncode ) )
+            # Try to get returncode of MTA
+            # Process is not terminated until timeout, set returncode to None
+            try:
+                returncode = MTA.wait(timeout=30)
+            except TimeoutExpired:
+                returncode = None
+
+        # Catch MTA errors
+        if returncode:
+            raise MailError( "/usr/sbin/exim terminated with " +
+                             "returncode != 0. Returncode was " +
+                             str( returncode ) )
+
+    except FileNotFoundError:
+
+        # Local fallback
+        with open( config.bot_dir + "/Mail.txt", "a" ) as mail:
+            mail.write( "\n\n" )
+            mail.write( datetime.utcnow().strftime( "%Y-%m-%d %H:%M:%S (UTC)"))
+            mail.write( "\n" + msg.as_string() )
 
 
-class JogoBot:
+def is_active( task_slug, write=True ):
     """
-    Basic bot framework
+    Simple wrapper function for our ActiveAPI to use in Tasks
+    """
+
+    status = StatusAPI()
+
+    # First check if Bot is blocked
+    if write and status.is_blocked():
+
+        status.blocked()
+
+    task_slugs = ( None, task_slug )
+
+    for _task_slug in task_slugs:
+        # Then check if whole Bot is disabled by file
+        if status.is_disabled_by_file(_task_slug):
+
+            # Disabling by file normaly results out of Disabling on wiki
+            if status.is_disabled_on_wiki(_task_slug):
+
+                status.disabled_on_wiki(_task_slug, True)
+
+            else:
+
+                status.disabled_by_file(_task_slug)
+
+        # Status disabled is set on wiki but not yet by file
+        elif status.is_disabled_on_wiki(_task_slug):
+
+                status.disabled_on_wiki(_task_slug)
+
+
+class StatusAPI:
+    """
+    Provide an API for checking if Jogobot or specific task is blocked,
+    disabled on wiki or by file
     """
 
     def __init__( self ):
@@ -171,18 +218,10 @@ class JogoBot:
         self.site = pywikibot.Site()
 
         # We need the shell working directory
-        self.cwd = os.getcwd()
+        self.cwd = "/home/joni/GOLDERWEB/Daten/Projekte/" +\
+                   "05_Wikimedia/62_BOT/bot"
 
-    def is_active( self ):
-        """
-        Checks if whole bot or task specified by task_slug is:
-        * not blocked
-        * not disabled by file
-        * not disabled on wiki
-        """
-        pass
-
-    def is_active_on_wiki( self, task_slug=None ):
+    def is_disabled_on_wiki( self, task_slug=None ):
         """
         Checks if whole bot or task specified by task_slug is disabled
         on wiki
@@ -193,37 +232,35 @@ class JogoBot:
 
         # Define page for look up
         if task_slug:
-            page_title = "Benutzer:JogoBot/" + task_slug + "/active.js"
+            page_title = "Benutzer:JogoBot/" + task_slug + "/active"
         else:
             page_title = "Benutzer:JogoBot/active"
 
         # Get pywikibot page object
         page = pywikibot.Page( self.site, page_title )
 
+        # Make sure page exists
+        if not page.exists():
+            raise DisablingPageError
+
         # Get page text
         page_text = page.get()
 
         if "true" not in page_text.lower():
-            pass
-            # Disabled
+            return True
 
-            # Return False
-            # Send E-Mail
-            # Create disable-file
+        return False
 
-    def is_blocked_on_wiki( self ):
+    def is_blocked( self ):
         """
         Checks if bot user is blocked on wiki
         """
         if self.site.is_blocked():
-            pass
-            # Blocked
+            return True
 
-            # Return False
-            # Send E-Mail
-            # Create disable-file
+        return False
 
-    def is_active_by_file(self, task_slug=None):
+    def is_disabled_by_file(self, task_slug=None):
         """
         Checks if whole bot or task specified by task_slug is disabled
         by file
@@ -239,11 +276,9 @@ class JogoBot:
             disable_file = self.cwd + "/disabled"
 
         if os.path.isfile( disable_file ):
-            pass
-            # Disabled
+            return True
 
-            # Return False
-            # Send E-Mail
+        return False
 
     def create_disable_file( self, task_slug=None ):
         """
@@ -263,8 +298,107 @@ class JogoBot:
         with open(disable_file, 'a'):
             pass
 
+    def blocked( self ):
+        """
+        Handles process if Bot user is blocked
+        """
 
-class JogoBotMailError( Exception ):
+        # Mail-Fields
+        subject = "JogoBot: Bot-Account is blocked"
+        body = """Your Bot-Account is blocked on Wiki"""
+        mailto = "jogobot-status@golderweb.de"
+
+        sendmail( subject, body, mailto )
+
+        raise Blocked( body )
+
+    def disabled_by_file( self, task_slug=None ):
+        """
+        Handles process if Bot/Task is disabled by file
+        """
+
+        if task_slug:
+            subject = "JogoBot: Task " + task_slug + " is disabled by file!"
+            body = """
+The Bot-Task with slug %s is disabled by file!
+""" % task_slug
+            mailto = "jogobot-" + task_slug + "-status@golderweb.de"
+
+        else:
+            subject = "JogoBot: Bot is disabled by file!"
+            body = """The Bot is disabled by file!"""
+            mailto = "jogobot-status@golderweb.de"
+
+        sendmail( subject, body, mailto )
+
+        raise DisabledByFile( body )
+
+    def disabled_on_wiki( self, task_slug=None, file=False ):
+        """
+        Handles process if Bot/Task is disabled on wiki
+        """
+
+        if file:
+            suffix = " and also by file!"
+        else:
+            suffix = "!\nA disabled file is going to be created."
+
+        if task_slug:
+            subject = "JogoBot: Task " + task_slug + " is disabled on wiki!"
+            body = """
+The Bot-Task with slug %s is disabled on wiki%s
+""" % (task_slug, suffix)
+            mailto = "jogobot-" + task_slug + "-status@golderweb.de"
+        else:
+            subject = "JogoBot: Bot is disabled on wiki!"
+            body = """
+The Bot is disabled by on wiki%s
+""" % suffix
+            mailto = "jogobot-status@golderweb.de"
+
+        sendmail( subject, body, mailto )
+
+        self.create_disable_file( task_slug )
+
+        raise DisabledOnWiki( body )
+
+
+class Disabled( Exception ):
+    """
+    Handles disabled Bot/Task
+    """
+    pass
+
+
+class DisablingPageError( Disabled ):
+    """
+    Handles errors with missing disabling pages
+    """
+    pass
+
+
+class Blocked( Disabled ):
+    """
+    Raised if Bot-Account is blocked
+    """
+    pass
+
+
+class DisabledByFile( Disabled ):
+    """
+    Raised if Bot/Task is disabled by File
+    """
+    pass
+
+
+class DisabledOnWiki( Disabled ):
+    """
+    Raised if Bot/Task is disabled on Wiki
+    """
+    pass
+
+
+class MailError( Exception ):
     """
     Handles errors occuring in class JogoBot related to mail actions
     """
