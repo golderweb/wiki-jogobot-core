@@ -99,6 +99,64 @@ def pywikibot_output( text, decoder=None, newline=True,
 pywikibot.output = pywikibot_output
 
 
+def sendmail( Subject, Body, To=None, CC=None, BCC=None,
+              From="JogoBot <tools.jogobot@tools.wmflabs.org>" ):
+    """
+    Provides a simple wrapper for exim (MTA) on tool labs
+    Params should be formated according related fields in RFC 5322
+
+    @param subject  Mail subject
+    @type subject str
+    @param body    Mail body as (formated) string
+    @type body  unicode-str
+    @param to   Mail-Recipiends (comma-separeded)
+    @type str
+    @param from Mail-Sender
+    @type str
+    """
+
+    # Create mail body as MIME-Object
+    msg = MIMEText(Body)
+
+    # Set up mail header
+    msg['Subject'] = Subject
+
+    msg['From'] = From
+
+    if To:
+        msg['To'] = To
+
+    if CC:
+        msg['CC'] = CC
+
+    if BCC:
+        msg['BCC'] = BCC
+
+    msg['Content-Type'] = 'text/plain; charset=utf-8'
+
+    # Make sure we have a recipient
+    if not( To or CC or BCC):
+        raise JogoBotMailError( "No recipient was provided!" )
+
+    # Send the message via exim
+    with Popen( ["/usr/sbin/exim", "-odf", "-i", "-t"],
+                stdin=PIPE, universal_newlines=True) as MTA:
+        MTA.communicate(msg.as_string())
+
+        # Try to get returncode of MTA
+        # Process is not terminated until timeout, set returncode to None
+        try:
+            returncode = MTA.wait(timeout=30)
+        except TimeoutExpired:
+            returncode = None
+
+    # Catch MTA errors
+    if returncode:
+        raise JogoBotMailError( "/usr/sbin/exim terminated with " +
+                                "returncode != 0. Returncode was " +
+                                str( returncode ) )
+
+
 class JogoBot:
     """
     Basic bot framework
@@ -204,64 +262,6 @@ class JogoBot:
         # Try to create file
         with open(disable_file, 'a'):
             pass
-
-    @staticmethod
-    def sendmail( Subject, Body, To=None, CC=None, BCC=None,
-                  From="JogoBot <tools.jogobot@tools.wmflabs.org>" ):
-        """
-        Provides a simple wrapper for exim (MTA) on tool labs
-        Params should be formated according related fields in RFC 5322
-
-        @param subject  Mail subject
-        @type subject str
-        @param body    Mail body as (formated) string
-        @type body  unicode-str
-        @param to   Mail-Recipiends (comma-separeded)
-        @type str
-        @param from Mail-Sender
-        @type str
-        """
-
-        # Create mail body as MIME-Object
-        msg = MIMEText(Body)
-
-        # Set up mail header
-        msg['Subject'] = Subject
-
-        msg['From'] = From
-
-        if To:
-            msg['To'] = To
-
-        if CC:
-            msg['CC'] = CC
-
-        if BCC:
-            msg['BCC'] = BCC
-
-        msg['Content-Type'] = 'text/plain; charset=utf-8'
-
-        # Make sure we have a recipient
-        if not( To or CC or BCC):
-            raise JogoBotMailError( "No recipient was provided!" )
-
-        # Send the message via exim
-        with Popen( ["/usr/sbin/exim", "-odf", "-i", "-t"],
-                    stdin=PIPE, universal_newlines=True) as MTA:
-            MTA.communicate(msg.as_string())
-
-            # Try to get returncode of MTA
-            # Process is not terminated until timeout, set returncode to None
-            try:
-                returncode = MTA.wait(timeout=30)
-            except TimeoutExpired:
-                returncode = None
-
-        # Catch MTA errors
-        if returncode:
-            raise JogoBotMailError( "/usr/sbin/exim terminated with " +
-                                    "returncode != 0. Returncode was " +
-                                    str( returncode ) )
 
 
 class JogoBotMailError( Exception ):
