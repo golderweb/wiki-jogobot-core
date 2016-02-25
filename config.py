@@ -30,7 +30,7 @@ import configparser
 
 import pywikibot
 
-config = configparser.ConfigParser()
+config = configparser.ConfigParser(interpolation=None)
 config.read(pywikibot.config.get_base_dir() + "/jogobot.conf")
 
 # Make jogobot entrys available in root level (without sections)
