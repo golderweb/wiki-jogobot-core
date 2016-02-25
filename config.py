@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8  -*-
 #
-#  __init__.py
+#  config.py
 #
-#  Copyright 2015 GOLDERWEB – Jonathan Golder <jonathan@golderweb.de>
+#  Copyright 2016 GOLDERWEB – Jonathan Golder <jonathan@golderweb.de>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -22,8 +22,18 @@
 #
 #
 """
-Scripts for our redundances bot
+This module will read config for jogobot from config file (ini-style) using
+python standard library module configparser
 """
-# noqa needed to prevent pyflakes from warning about unused imports
-from jogobot.jogobot import ( output, sendmail, is_active )  # noqa
-from jogobot.config import config  # noqa
+
+import configparser
+
+import pywikibot
+
+config = configparser.ConfigParser()
+config.read(pywikibot.config.get_base_dir() + "/jogobot.conf")
+
+# Make jogobot entrys available in root level (without sections)
+config = dict( config )
+for key, value in dict(config["jogobot"]).items():
+    config[key] = value
