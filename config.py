@@ -27,13 +27,25 @@ python standard library module configparser
 """
 
 import configparser
+import ast
 
 import pywikibot
 
-config = configparser.ConfigParser(interpolation=None)
-config.read(pywikibot.config.get_base_dir() + "/jogobot.conf")
+__config = configparser.ConfigParser(interpolation=None)
+__config.read(pywikibot.config.get_base_dir() + "/jogobot.conf")
+
+# Convert to dict as configparser could contain only strings
+config = dict( __config )
+
+# Parse all sections
+for section in __config.sections():
+    # Convert to dict as configparser could contain only strings
+    config[section] = dict( __config[section] )
+
+    # Parse config with ast.literal_eval to get python datatypes
+    for key, value in config[section].items():
+        config[section][key] = ast.literal_eval( value )
 
 # Make jogobot entrys available in root level (without sections)
-config = dict( config )
-for key, value in dict(config["jogobot"]).items():
+for key, value in config["jogobot"].items():
     config[key] = value
