@@ -31,21 +31,66 @@ import ast
 
 import pywikibot
 
-__config = configparser.ConfigParser(interpolation=None)
-__config.read(pywikibot.config.get_base_dir() + "/jogobot.conf")
 
-# Convert to dict as configparser could contain only strings
-config = dict( __config )
+def load_config():
+    """
+    Reads raw configuration from file and provides it as attribute
 
-# Parse all sections
-for section in __config.sections():
+    @param  Config-Object
+    @r-type  configparser.ConfigParser
+    """
+    # Load configparser
+    config = configparser.ConfigParser(interpolation=None)
+    # Load config file
+    config.read(pywikibot.config.get_base_dir() + "/jogobot.conf")
+
+    return config
+
+
+def parse_config( raw_config ):
+    """
+    Converts config to normal dictionary
+    Parses each entry with ast.literal_eval
+
+    @param config  Config-Object to parse
+    @type config  configparser.ConfigParser
+
+    @return  Parsed configuration
+    @rtype  dict
+    """
     # Convert to dict as configparser could contain only strings
-    config[section] = dict( __config[section] )
+    config = dict( raw_config )
 
-    # Parse config with ast.literal_eval to get python datatypes
+    # Parse all sections
+    for section in raw_config.sections():
+        # Convert to dict as configparser could contain only strings
+        config[section] = dict( raw_config[section] )
+
+        # Parse config with ast.literal_eval to get python datatypes
+        for key, value in config[section].items():
+            config[section][key] = ast.literal_eval( value )
+
+    return config
+
+
+def root_section( config, section="jogobot" ):
+    """
+    Make 'section' entrys available in root level (without sections)
+
+    @param config  Config-Object to parse
+    @type config  dict
+
+    @return  Parsed configuration
+    @rtype  dict
+    """
     for key, value in config[section].items():
-        config[section][key] = ast.literal_eval( value )
+        config[key] = value
 
-# Make jogobot entrys available in root level (without sections)
-for key, value in config["jogobot"].items():
-    config[key] = value
+    return config
+
+# Load config
+config = load_config()
+# Parse config to get python datatypes
+config = parse_config( config )
+# Make jogobot section available as root
+config = root_section( config )
