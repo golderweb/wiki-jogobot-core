@@ -23,6 +23,7 @@
 #
 
 import os
+import shlex
 from datetime import datetime
 from email.mime.text import MIMEText
 from subprocess import Popen, PIPE, TimeoutExpired
@@ -32,7 +33,7 @@ import pywikibot
 from pywikibot.bot import(
     DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
 
-import jogobot.config as config
+from jogobot.config import config
 
 
 def output( text, level="INFO", decoder=None, newline=True,
@@ -41,7 +42,7 @@ def output( text, level="INFO", decoder=None, newline=True,
     Wrapper for pywikibot output functions
     """
 
-    text = datetime.utcnow().strftime( "%Y-%m-%d %H:%M:%S (UTC) " ) + text
+    text = datetime.utcnow().strftime( config["log_timestamp"] ) + " " + text
 
     if ( level.upper() == "STDOUT" ):
         _level = STDOUT
@@ -102,7 +103,7 @@ pywikibot.output = pywikibot_output
 
 
 def sendmail( Subject, Body, To=None, CC=None, BCC=None,
-              From="JogoBot <tools.jogobot@tools.wmflabs.org>" ):
+              From=config["mail_from"] ):
     """
     Provides a simple wrapper for exim (MTA) on tool labs
     Params should be formated according related fields in RFC 5322
@@ -143,7 +144,7 @@ def sendmail( Subject, Body, To=None, CC=None, BCC=None,
     # We have no local MTA so we need to catch errors and write to file instead
     try:
         # Send the message via exim
-        with Popen( config.mail_cmd, stdin=PIPE,
+        with Popen( shlex.split(config['mail_cmd']), stdin=PIPE,
                     universal_newlines=True ) as MTA:
 
             MTA.communicate(msg.as_string())
@@ -164,9 +165,9 @@ def sendmail( Subject, Body, To=None, CC=None, BCC=None,
     except FileNotFoundError:
 
         # Local fallback
-        with open( config.bot_dir + "/Mail.txt", "a" ) as mail:
+        with open( config["dir"] + "/Mail.txt", "a" ) as mail:
             mail.write( "\n\n" )
-            mail.write( datetime.utcnow().strftime( "%Y-%m-%d %H:%M:%S (UTC)"))
+            mail.write( datetime.utcnow().strftime( config["log_timestamp"]))
             mail.write( "\n" + msg.as_string() )
 
 
@@ -218,8 +219,7 @@ class StatusAPI:
         self.site = pywikibot.Site()
 
         # We need the shell working directory
-        self.cwd = "/home/joni/GOLDERWEB/Daten/Projekte/" +\
-                   "05_Wikimedia/62_BOT/bot"
+        self.cwd = config["dir"]
 
     def is_disabled_on_wiki( self, task_slug=None ):
         """
