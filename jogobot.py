@@ -30,8 +30,16 @@ from subprocess import Popen, PIPE, TimeoutExpired
 
 import pywikibot
 
-from pywikibot.bot import(
-    DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
+# Location of logging related stuff in pywikibot was changed with
+# commit d7d7a14 on Mon Sep 7 14:41:43 2015
+# This is to be compatible with recent versions as well as 2.0-branch
+try:
+    from pywikibot.logging import(
+        DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
+except( ImportError ):
+    # Legacy support (pywikibot 2.0 branch)
+    from pywikibot.bot import(
+        DEBUG, INFO, WARNING, ERROR, CRITICAL, STDOUT, VERBOSE, logoutput )
 
 from jogobot.config import config
 
