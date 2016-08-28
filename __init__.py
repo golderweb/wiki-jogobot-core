@@ -22,8 +22,9 @@
 #
 #
 """
-Scripts for our redundances bot
+Scripts for our bot framework
 """
 # noqa needed to prevent pyflakes from warning about unused imports
 from jogobot.jogobot import ( output, sendmail, is_active )  # noqa
 from jogobot.config import config  # noqa
+import jogobot.bot as bot  # noqa
